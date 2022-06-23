@@ -6,7 +6,7 @@
 #include <sys/stat.h> 
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#define BUFFER_SIZE 1 // maximum page file size (for optimisation)
+#define BUFFER_SIZE 2 // maximum page file size (for optimisation)
 
 
 int check_read_err(int retval) {
@@ -14,6 +14,7 @@ int check_read_err(int retval) {
 		perror("read()");
 		return -1;
 	}
+	return 0;
 }
 
 int check_alloc(char *buff)  {
@@ -21,6 +22,7 @@ int check_alloc(char *buff)  {
 		fprintf(stderr, "Error: Could not allocate memory\n");
 		return -1;
 	}
+	return 0;
 }
 
 void read_from_file(int fd) {
@@ -33,8 +35,9 @@ void read_from_file(int fd) {
 	buffer = malloc(file_size  + 1);
 
 	while (1) {
-		if (!check_alloc(buffer))
+		if (!check_alloc(buffer)) {
 			break;	
+		}
 		buffer[file_size + 1] = '\0';
 		write(1, buffer, file_size);
 		break;
@@ -46,39 +49,37 @@ void read_from_file(int fd) {
 
 void read_from_stdin() {
 	char *buffer;
-	int number_of_bytes;
-	int total_size;
-	int current_char;
+	char c;
+	int total_size, i;
 
 	buffer = malloc(BUFFER_SIZE);
-	number_of_bytes = read(0, buffer, BUFFER_SIZE);
-
 	total_size = BUFFER_SIZE;
-	while (1) {
-		if (!check_read_err(number_of_bytes)) {
-			exit(-1);
+
+	i = 0;
+	while ((c = getchar()) != EOF && c != '\0') {
+		if (i != total_size) {
+			buffer[i] = c;
+			if (c == '\n') {
+				break;
+			}
+			i++;
+		} else { // reallocate and continue reading
+			total_size *= 2;
+			if (realloc(buffer, total_size) == NULL) {
+				fprintf(stderr, "Error: Could not allocate memory\n");
+				exit(-1);
+			}
+			buffer[i++] = c;
+			if (c == '\n') {
+				break;
+			}
 		}
-		// we got to the EOF, print the input out	
-		if (number_of_bytes == 0 || number_of_bytes < total_size) { 
-			write(1, buffer, BUFFER_SIZE);
-			break;
-		} else { // reallocate and re-read again
-			do {
-				total_size = total_size * 2;
-				if (!realloc(buffer, total_size)) {
-					perror("realloc()");
-					break;
-				}
-				number_of_bytes = read(0, buffer, total_size);
-				if (!check_read_err(number_of_bytes)) {
-					exit(-1);
-				}
-			} while (number_of_bytes < total_size);
-		}
-		write(1, buffer, total_size);
-		break;
 	}
 
+	// append a null byte and print out what we got
+	buffer[i] = '\0';
+	write(1, buffer, total_size);
+	
 	free(buffer);
 }
 
